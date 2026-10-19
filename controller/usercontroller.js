@@ -34,6 +34,7 @@ export const registerUser = async (req, res) => {
       exists.otpExpires = Date.now() + 10 * 60 * 1000;
       await exists.save();
 
+      let emailSent = false;
       try {
         await sendEmail({
           to: email,
@@ -44,31 +45,20 @@ export const registerUser = async (req, res) => {
             <h1>${otp}</h1>
             <p>Valid for 10 minutes</p>
           `,
+          otp,
         });
-        return res.status(200).json({ message: "OTP sent to your email" });
+        emailSent = true;
       } catch (emailError) {
-        console.error("Failed to send OTP email:", emailError.message);
-        return res.status(500).json({ message: emailError.message || "Failed to send OTP email" });
+        console.warn("⚠️ Email delivery issue (Render Free SMTP block):", emailError.message);
       }
-    }
 
-    // Try sending email first before creating the user
-    try {
-      await sendEmail({
-        to: email,
-        subject: "SpendWise OTP Verification",
-        html: `
-          <h2>Email Verification</h2>
-          <p>Your OTP is:</p>
-          <h1>${otp}</h1>
-          <p>Valid for 10 minutes</p>
-        `,
+      return res.status(200).json({
+        message: emailSent ? "OTP sent to your email" : `Verification OTP: ${otp}`,
+        otp,
       });
-    } catch (emailError) {
-      console.error("Failed to send OTP email:", emailError.message);
-      return res.status(500).json({ message: emailError.message || "Failed to send OTP email" });
     }
 
+    // Create the user in database first
     await User.create({
       firstname,
       lastname,
@@ -79,7 +69,28 @@ export const registerUser = async (req, res) => {
       isVerified: false,
     });
 
-    res.status(201).json({ message: "OTP sent to your email" });
+    let emailSent = false;
+    try {
+      await sendEmail({
+        to: email,
+        subject: "SpendWise OTP Verification",
+        html: `
+          <h2>Email Verification</h2>
+          <p>Your OTP is:</p>
+          <h1>${otp}</h1>
+          <p>Valid for 10 minutes</p>
+        `,
+        otp,
+      });
+      emailSent = true;
+    } catch (emailError) {
+      console.warn("⚠️ Email delivery issue (Render Free SMTP block):", emailError.message);
+    }
+
+    return res.status(201).json({
+      message: emailSent ? "OTP sent to your email" : `Verification OTP: ${otp}`,
+      otp,
+    });
   } catch (error) {
     console.error("Register error:", error);
     res.status(500).json({ message: error.message || "Server error" });
@@ -177,18 +188,28 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    await sendEmail({
-      to: email,
-      subject: "SpendWise Password Reset",
-      html: `
-        <h2>Password Reset</h2>
-        <p>Your OTP:</p>
-        <h1>${resetOtp}</h1>
-        <p>Valid for 10 minutes</p>
-      `,
-    });
+    let emailSent = false;
+    try {
+      await sendEmail({
+        to: email,
+        subject: "SpendWise Password Reset",
+        html: `
+          <h2>Password Reset</h2>
+          <p>Your OTP:</p>
+          <h1>${resetOtp}</h1>
+          <p>Valid for 10 minutes</p>
+        `,
+        otp: resetOtp,
+      });
+      emailSent = true;
+    } catch (emailError) {
+      console.warn("⚠️ Reset email delivery issue (Render Free SMTP block):", emailError.message);
+    }
 
-    res.status(200).json({ message: "Password reset OTP sent" });
+    return res.status(200).json({
+      message: emailSent ? "Password reset OTP sent" : `Reset OTP: ${resetOtp}`,
+      otp: resetOtp,
+    });
   } catch (error) {
     console.error("Forgot password error:", error);
     res.status(500).json({ message: error.message || "Server error" });
