@@ -1,14 +1,36 @@
 import nodemailer from "nodemailer";
 
 const sendEmail = async ({ to, subject, html, otp }) => {
-  // Always log OTP in server logs so it is immediately visible in Render Dashboard -> Logs
-  if (otp) {
-    console.log(`\n========================================`);
-    console.log(`🔑 SPENDWISE OTP FOR ${to}: [ ${otp} ]`);
-    console.log(`========================================\n`);
+  // 1. BREVO HTTP API (Port 443 - 300 free emails/day to ANY email address, works 100% on Render Free)
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const senderEmail = process.env.EMAIL_USER || "spendwise.app@gmail.com";
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "api-key": process.env.BREVO_API_KEY,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sender: { name: "SpendWise", email: senderEmail },
+          to: [{ email: to }],
+          subject: subject,
+          htmlContent: html,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || JSON.stringify(data));
+      console.log(`📧 Email sent via Brevo API to ${to}:`, data.messageId);
+      return data;
+    } catch (err) {
+      console.error("❌ Brevo API error:", err.message);
+      throw err;
+    }
   }
 
-  // 1. If RESEND_API_KEY is configured, use Resend HTTP API (Port 443 - works 100% on Render Free)
+  // 2. RESEND HTTP API (Port 443 - works 100% on Render Free)
   if (process.env.RESEND_API_KEY) {
     try {
       const response = await fetch("https://api.resend.com/emails", {
@@ -34,7 +56,7 @@ const sendEmail = async ({ to, subject, html, otp }) => {
     }
   }
 
-  // 2. SMTP fallback (Nodemailer)
+  // 3. SMTP fallback (Nodemailer - works in local development)
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "") : "";
 
@@ -52,9 +74,9 @@ const sendEmail = async ({ to, subject, html, otp }) => {
         user: emailUser,
         pass: emailPass,
       },
-      connectionTimeout: 4000, // 4 seconds quick timeout so request doesn't hang
-      greetingTimeout: 4000,
-      socketTimeout: 4000,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
     });
 
     const info = await transporter.sendMail({
@@ -64,7 +86,7 @@ const sendEmail = async ({ to, subject, html, otp }) => {
       html,
     });
 
-    console.log(`📧 Email sent successfully to ${to}: ${info.messageId}`);
+    console.log(`📧 Email sent successfully via SMTP to ${to}: ${info.messageId}`);
     return info;
   } catch (error) {
     console.error("❌ SMTP sending failed (Render Free Tier blocks outbound SMTP ports 25, 465, 587):", error.message || error);

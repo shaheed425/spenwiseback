@@ -53,8 +53,7 @@ export const registerUser = async (req, res) => {
       }
 
       return res.status(200).json({
-        message: emailSent ? "OTP sent to your email" : `Verification OTP: ${otp}`,
-        otp,
+        message: "OTP sent to your email",
       });
     }
 
@@ -88,8 +87,7 @@ export const registerUser = async (req, res) => {
     }
 
     return res.status(201).json({
-      message: emailSent ? "OTP sent to your email" : `Verification OTP: ${otp}`,
-      otp,
+      message: "OTP sent to your email",
     });
   } catch (error) {
     console.error("Register error:", error);
@@ -207,8 +205,7 @@ export const forgotPassword = async (req, res) => {
     }
 
     return res.status(200).json({
-      message: emailSent ? "Password reset OTP sent" : `Reset OTP: ${resetOtp}`,
-      otp: resetOtp,
+      message: "Password reset OTP sent to your email",
     });
   } catch (error) {
     console.error("Forgot password error:", error);
