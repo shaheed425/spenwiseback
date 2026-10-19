@@ -1,30 +1,40 @@
 import nodemailer from "nodemailer";
 
 const sendEmail = async ({ to, subject, html }) => {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "") : "";
+
+  if (!emailUser || !emailPass) {
+    console.error("❌ Email credentials missing in environment variables (EMAIL_USER or EMAIL_PASS)");
+    throw new Error("Email credentials missing on server (EMAIL_USER / EMAIL_PASS)");
+  }
+
   try {
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true, // SSL on port 465 is the most reliable on cloud hosts like Render
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, // Gmail App Password
+        user: emailUser,
+        pass: emailPass,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     });
 
-    // ✅ Verify transporter (helps debug auth issues)
-    await transporter.verify();
-
-    await transporter.sendMail({
-      from: `"SpendWise" <${process.env.EMAIL_USER}>`,
+    const info = await transporter.sendMail({
+      from: `"SpendWise" <${emailUser}>`,
       to,
       subject,
       html,
     });
 
-    console.log(`📧 Email sent successfully to ${to}`);
-
+    console.log(`📧 Email sent successfully to ${to}: ${info.messageId}`);
+    return info;
   } catch (error) {
-    console.error("❌ Email sending failed:", error);
-    throw new Error("Email could not be sent");
+    console.error("❌ Email sending failed:", error.message || error);
+    throw new Error(error.message || "Email could not be sent");
   }
 };
 

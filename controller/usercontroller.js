@@ -18,24 +18,41 @@ export const registerUser = async (req, res) => {
     }
 
     const exists = await User.findOne({ email });
-    if (exists) {
-      return res.status(409).json({ message: "Email already registered" });
-    }
-
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    if (exists) {
+      if (exists.isVerified) {
+        return res.status(409).json({ message: "Email already registered" });
+      }
 
-    await User.create({
-      firstname,
-      lastname,
-      email,
-      password: hashedPassword,
-      otp,
-      otpExpires: Date.now() + 10 * 60 * 1000,
-      isVerified: false,
-    });
+      // If user exists but not verified, update details and resend OTP
+      exists.firstname = firstname;
+      exists.lastname = lastname;
+      exists.password = hashedPassword;
+      exists.otp = otp;
+      exists.otpExpires = Date.now() + 10 * 60 * 1000;
+      await exists.save();
 
+      try {
+        await sendEmail({
+          to: email,
+          subject: "SpendWise OTP Verification",
+          html: `
+            <h2>Email Verification</h2>
+            <p>Your OTP is:</p>
+            <h1>${otp}</h1>
+            <p>Valid for 10 minutes</p>
+          `,
+        });
+        return res.status(200).json({ message: "OTP sent to your email" });
+      } catch (emailError) {
+        console.error("Failed to send OTP email:", emailError.message);
+        return res.status(500).json({ message: emailError.message || "Failed to send OTP email" });
+      }
+    }
+
+    // Try sending email first before creating the user
     try {
       await sendEmail({
         to: email,
@@ -48,16 +65,24 @@ export const registerUser = async (req, res) => {
         `,
       });
     } catch (emailError) {
-      console.error("Failed to send OTP email, but user was created:", emailError);
-      // We can decide to return a specific message, or still say "OTP sent"
-      // Wait, returning "OTP sent" when it failed isn't great.
-      return res.status(201).json({ message: "User registered, but failed to send OTP email." });
+      console.error("Failed to send OTP email:", emailError.message);
+      return res.status(500).json({ message: emailError.message || "Failed to send OTP email" });
     }
+
+    await User.create({
+      firstname,
+      lastname,
+      email,
+      password: hashedPassword,
+      otp,
+      otpExpires: Date.now() + 10 * 60 * 1000,
+      isVerified: false,
+    });
 
     res.status(201).json({ message: "OTP sent to your email" });
   } catch (error) {
     console.error("Register error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: error.message || "Server error" });
   }
 };
 
@@ -166,7 +191,7 @@ export const forgotPassword = async (req, res) => {
     res.status(200).json({ message: "Password reset OTP sent" });
   } catch (error) {
     console.error("Forgot password error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: error.message || "Server error" });
   }
 };
 
